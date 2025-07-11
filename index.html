@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🎧 My Music Player</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f3f3;
+      padding: 20px;
+    }
+    .song {
+      margin-bottom: 20px;
+      padding: 10px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>🎵 My Latest Songs</h1>
+  <div id="songs">Loading...</div>
+
+  <script>
+    async function loadSongs() {
+      const container = document.getElementById("songs");
+      try {
+        const response = await fetch("/api/music");
+        const songs = await response.json();
+
+        container.innerHTML = "";
+        songs.forEach(song => {
+          const div = document.createElement("div");
+          div.className = "song";
+
+          const title = document.createElement("h3");
+          title.innerText = song.title;
+
+          const audio = document.createElement("audio");
+          audio.controls = true;
+          audio.src = song.url;
+
+          div.appendChild(title);
+          div.appendChild(audio);
+          container.appendChild(div);
+        });
+      } catch (e) {
+        container.innerHTML = "Failed to load songs.";
+      }
+    }
+
+    loadSongs();
+  </script>
+</body>
+</html>
