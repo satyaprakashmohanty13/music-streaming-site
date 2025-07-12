@@ -1,0 +1,14 @@
+{
+  "name": "music-streaming-site",
+  "version": "1.0.0",
+  "description": "A simple music streaming website using Vercel and Cloudinary",
+  "main": "api/music.js",
+  "scripts": {
+    "start": "node api/music.js"
+  },
+  "dependencies": {
+    "cloudinary": "^1.41.0"
+  },
+  "devDependencies": {}
+}
+
