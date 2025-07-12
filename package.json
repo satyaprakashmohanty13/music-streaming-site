@@ -1,14 +1,14 @@
 {
   "name": "music-streaming-site",
   "version": "1.0.0",
-  "description": "A simple music streaming website using Vercel and Cloudinary",
+  "description": "A simple music streaming website using Vercel, Cloudinary, and Firebase",
   "main": "api/music.js",
   "scripts": {
     "start": "node api/music.js"
   },
   "dependencies": {
     "cloudinary": "^1.41.0",
-    "@supabase/supabase-js": "^2.10.0"
+    "firebase-admin": "^12.0.0"
   },
   "devDependencies": {}
 }
