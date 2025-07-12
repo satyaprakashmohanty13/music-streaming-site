@@ -8,8 +8,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter font from Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- Supabase CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -64,60 +66,89 @@
     </div>
 
     <script>
-        // IMPORTANT: Replace with your actual Supabase URL and Anon Key
-        // You can find these in your Supabase project settings -> API
-        const SUPABASE_URL = 'https://hbgxspvrqdhjppuwiygv.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhiZ3hzcHZycWRoanBwdXdpeWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyODk2NzYsImV4cCI6MjA2Nzg2NTY3Nn0.Jk-x75r-ZfrsHqlD9-oXPsX0JKFwUEM-IxCPwAu4yrY';
+        // Firebase Configuration (replace with your actual config from Firebase Console)
+        // These values will be populated by Vercel environment variables at runtime
+        const firebaseConfig = {
+            apiKey: 'YOUR_FIREBASE_API_KEY', // Will be replaced by Vercel env var
+            authDomain: 'YOUR_FIREBASE_AUTH_DOMAIN', // Will be replaced by Vercel env var
+            projectId: 'YOUR_FIREBASE_PROJECT_ID', // Will be replaced by Vercel env var
+            storageBucket: 'YOUR_FIREBASE_STORAGE_BUCKET', // Will be replaced by Vercel env var
+            messagingSenderId: 'YOUR_FIREBASE_MESSAGING_SENDER_ID', // Will be replaced by Vercel env var
+            appId: 'YOUR_FIREBASE_APP_ID' // Will be replaced by Vercel env var
+        };
 
-        const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        let userId = localStorage.getItem('music_player_user_id');
-        if (!userId) {
-            userId = crypto.randomUUID(); // Generate a unique ID for the user
-            localStorage.setItem('music_player_user_id', userId);
+        // Initialize Firebase if not already initialized
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
         }
-        console.log('User ID:', userId); // For debugging: log the user ID
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let currentUserId = null; // Will store Firebase Auth UID
 
         // Store the user's interactions in memory to update UI instantly
         let userInteractions = {}; // { 'song_public_id': 'like' | 'dislike' | null }
 
         document.addEventListener('DOMContentLoaded', async () => {
+            console.log('DOM Content Loaded. Starting music fetch process...');
             const musicListDiv = document.getElementById('music-list');
             const loadingDiv = document.getElementById('loading');
             const noMusicFoundDiv = document.getElementById('no-music-found');
 
             try {
-                // 1. Fetch music data from the serverless function
+                // 1. Authenticate anonymously with Firebase
+                console.log('Signing in anonymously with Firebase...');
+                const userCredential = await auth.signInAnonymously();
+                currentUserId = userCredential.user.uid;
+                console.log('Firebase Anonymous User ID:', currentUserId);
+
+                // 2. Fetch music data from the Cloudinary serverless function
+                console.log('Fetching music from /api/music...');
                 const musicResponse = await fetch('/api/music');
+                console.log('Music API response status:', musicResponse.status);
+
                 if (!musicResponse.ok) {
-                    throw new Error(`HTTP error! status: ${musicResponse.status} from /api/music`);
+                    const errorText = await musicResponse.text();
+                    console.error('Music API non-OK response body:', errorText);
+                    throw new Error(`HTTP error! status: ${musicResponse.status} from /api/music. Response: ${errorText}`);
                 }
+
                 const musicFiles = await musicResponse.json();
+                console.log('Fetched music files:', musicFiles);
 
                 if (musicFiles.length === 0) {
                     noMusicFoundDiv.classList.remove('hidden');
+                    console.log('No music files found on Cloudinary.');
                     return; // Exit if no music is found
                 }
 
-                // 2. Fetch all user interactions for this user
-                const interactionsResponse = await fetch(`/api/interact?userId=${userId}`);
+                // 3. Fetch all user interactions for this user from the new Firebase interaction API
+                console.log(`Fetching user interactions for user ID: ${currentUserId} from /api/interact-firebase?userId=${currentUserId}...`);
+                const interactionsResponse = await fetch(`/api/interact-firebase?userId=${currentUserId}`);
+                console.log('Interactions API response status:', interactionsResponse.status);
+
                 if (!interactionsResponse.ok) {
-                    throw new Error(`HTTP error! status: ${interactionsResponse.status} from /api/interact`);
+                    const errorText = await interactionsResponse.text();
+                    console.error('Interactions API non-OK response body:', errorText);
+                    throw new Error(`HTTP error! status: ${interactionsResponse.status} from /api/interact-firebase. Response: ${errorText}`);
                 }
                 const interactions = await interactionsResponse.json();
                 interactions.forEach(interaction => {
                     userInteractions[interaction.song_public_id] = interaction.interaction_type;
                 });
-                console.log('User Interactions:', userInteractions); // For debugging
+                console.log('User Interactions loaded:', userInteractions);
 
-                // 3. Display music files with interaction counts
+                // 4. Display music files with interaction counts
+                console.log('Displaying music files...');
                 await displayMusicFiles(musicFiles);
+                console.log('Music files displayed.');
 
             } catch (error) {
-                console.error('Error loading music or interactions:', error);
-                musicListDiv.innerHTML = `<p class="text-red-400 text-center col-span-full">Failed to load music or interactions. Please check the console for details: ${error.message}</p>`;
+                console.error('Caught an error during initial load:', error);
+                musicListDiv.innerHTML = `<p class="text-red-400 text-center col-span-full">Failed to load music or interactions. Please check the browser console and Vercel logs for details: ${error.message}</p>`;
             } finally {
                 loadingDiv.classList.add('hidden'); // Hide loading indicator
+                console.log('Loading indicator hidden.');
             }
         });
 
@@ -165,17 +196,23 @@
                 musicListDiv.appendChild(card);
 
                 // Fetch and update counts for this specific song
+                console.log(`Updating interaction counts for: ${file.public_id}`);
                 await updateInteractionCounts(file.public_id, card);
             }
         }
 
         async function updateInteractionCounts(songPublicId, cardElement) {
             try {
-                const response = await fetch(`/api/interact?songPublicId=${songPublicId}`);
+                console.log(`Fetching counts for song: ${songPublicId}`);
+                const response = await fetch(`/api/interact-firebase?songPublicId=${songPublicId}`);
                 if (!response.ok) {
-                    throw new Error(`Failed to fetch counts for ${songPublicId}`);
+                    const errorText = await response.text();
+                    console.error(`Failed to fetch counts for ${songPublicId}. Response: ${errorText}`);
+                    throw new Error(`Failed to fetch counts for ${songPublicId}. Status: ${response.status}`);
                 }
                 const counts = await response.json();
+                console.log(`Counts for ${songPublicId}:`, counts);
+
                 const likeCountSpan = cardElement.querySelector('.like-count');
                 const dislikeCountSpan = cardElement.querySelector('.dislike-count');
                 const likeButton = cardElement.querySelector('.interaction-button.like');
@@ -186,10 +223,8 @@
 
                 // Disable buttons if user has already interacted
                 const userInteraction = userInteractions[songPublicId];
-                if (userInteraction === 'like') {
-                    if (likeButton) likeButton.disabled = true;
-                    if (dislikeButton) dislikeButton.disabled = true;
-                } else if (userInteraction === 'dislike') {
+                if (userInteraction === 'like' || userInteraction === 'dislike') {
+                    console.log(`User has already interacted with ${songPublicId}. Disabling buttons.`);
                     if (likeButton) likeButton.disabled = true;
                     if (dislikeButton) dislikeButton.disabled = true;
                 } else {
@@ -204,29 +239,33 @@
         }
 
         async function handleInteraction(songPublicId, type, likeButton, dislikeButton) {
+            console.log(`Handling interaction: ${type} for ${songPublicId}`);
             // Disable buttons immediately to prevent double-clicks
             if (likeButton) likeButton.disabled = true;
             if (dislikeButton) dislikeButton.disabled = true;
 
             try {
-                const response = await fetch('/api/interact', {
+                const response = await fetch('/api/interact-firebase', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         songPublicId: songPublicId,
-                        userId: userId,
+                        userId: currentUserId, // Use Firebase Auth UID
                         action: type, // 'like' or 'dislike'
                     }),
                 });
 
+                console.log('Interaction POST API response status:', response.status);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorText = await response.text();
+                    console.error('Interaction POST API non-OK response body:', errorText);
+                    throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
                 }
 
                 const result = await response.json();
-                console.log('Interaction result:', result);
+                console.log('Interaction POST result:', result);
 
                 // Update counts on UI
                 const cardElement = likeButton.closest('.audio-card'); // Find the parent card
@@ -239,6 +278,7 @@
 
                 // Update userInteractions state
                 userInteractions[songPublicId] = type;
+                console.log(`User interaction for ${songPublicId} updated to ${type}.`);
 
             } catch (error) {
                 console.error('Error sending interaction:', error);
