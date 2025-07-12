@@ -7,8 +7,8 @@
     "start": "node api/music.js"
   },
   "dependencies": {
-    "cloudinary": "^1.41.0"
+    "cloudinary": "^1.41.0",
+    "@supabase/supabase-js": "^2.x.x"  <-- Make sure this is present or add it
   },
   "devDependencies": {}
 }
-
